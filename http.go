@@ -30,8 +30,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mailgun/groupcache/v2/consistenthash"
-	pb "github.com/mailgun/groupcache/v2/groupcachepb"
+	"github.com/oyediyildiz/groupcache/v2/consistenthash"
+	pb "github.com/oyediyildiz/groupcache/v2/groupcachepb"
 )
 
 const defaultBasePath = "/_groupcache/"
@@ -281,7 +281,7 @@ func (h *httpGetter) makeRequest(ctx context.Context, m string, in request, b io
 	)
 	req, err := http.NewRequestWithContext(ctx, m, u, b)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create new request: %w", err)
 	}
 
 	tr := http.DefaultTransport
@@ -291,7 +291,7 @@ func (h *httpGetter) makeRequest(ctx context.Context, m string, in request, b io
 
 	res, err := tr.RoundTrip(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to roundtrip: %w", err)
 	}
 	*out = *res
 	return nil
@@ -300,7 +300,7 @@ func (h *httpGetter) makeRequest(ctx context.Context, m string, in request, b io
 func (h *httpGetter) Get(ctx context.Context, in *pb.GetRequest, out *pb.GetResponse) error {
 	var res http.Response
 	if err := h.makeRequest(ctx, http.MethodGet, in, nil, &res); err != nil {
-		return err
+		return fmt.Errorf("failed to make request: %w", err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
@@ -322,11 +322,11 @@ func (h *httpGetter) Get(ctx context.Context, in *pb.GetRequest, out *pb.GetResp
 	defer bufferPool.Put(b)
 	_, err := io.Copy(b, res.Body)
 	if err != nil {
-		return fmt.Errorf("reading response body: %v", err)
+		return fmt.Errorf("failed to read response body: %w", err)
 	}
 	err = proto.Unmarshal(b.Bytes(), out)
 	if err != nil {
-		return fmt.Errorf("decoding response body: %v", err)
+		return fmt.Errorf("failed to decode response body: %w", err)
 	}
 	return nil
 }
@@ -334,18 +334,18 @@ func (h *httpGetter) Get(ctx context.Context, in *pb.GetRequest, out *pb.GetResp
 func (h *httpGetter) Set(ctx context.Context, in *pb.SetRequest) error {
 	body, err := proto.Marshal(in)
 	if err != nil {
-		return fmt.Errorf("while marshaling SetRequest body: %w", err)
+		return fmt.Errorf("failed to marshal: set request %w", err)
 	}
 	var res http.Response
 	if err := h.makeRequest(ctx, http.MethodPut, in, bytes.NewReader(body), &res); err != nil {
-		return err
+		return fmt.Errorf("failed to make request: %w", err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		body, err := ioutil.ReadAll(res.Body)
 		if err != nil {
-			return fmt.Errorf("while reading body response: %v", res.Status)
+			return fmt.Errorf("failed to read response body (status=%v): %v", res.Status, err)
 		}
 		return fmt.Errorf("server returned status %d: %s", res.StatusCode, body)
 	}
@@ -355,14 +355,14 @@ func (h *httpGetter) Set(ctx context.Context, in *pb.SetRequest) error {
 func (h *httpGetter) Remove(ctx context.Context, in *pb.GetRequest) error {
 	var res http.Response
 	if err := h.makeRequest(ctx, http.MethodDelete, in, nil, &res); err != nil {
-		return err
+		return fmt.Errorf("failed to make request: %w", err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		body, err := ioutil.ReadAll(res.Body)
 		if err != nil {
-			return fmt.Errorf("while reading body response: %v", res.Status)
+			return fmt.Errorf("failed to read response body (status=%v): %w", res.Status, err)
 		}
 		return fmt.Errorf("server returned status %d: %s", res.StatusCode, body)
 	}

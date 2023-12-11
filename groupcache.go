@@ -27,14 +27,15 @@ package groupcache
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	pb "github.com/mailgun/groupcache/v2/groupcachepb"
-	"github.com/mailgun/groupcache/v2/lru"
-	"github.com/mailgun/groupcache/v2/singleflight"
+	pb "github.com/oyediyildiz/groupcache/v2/groupcachepb"
+	"github.com/oyediyildiz/groupcache/v2/lru"
+	"github.com/oyediyildiz/groupcache/v2/singleflight"
 	"github.com/sirupsen/logrus"
 )
 
@@ -246,7 +247,10 @@ func (g *Group) Get(ctx context.Context, key string, dest Sink) error {
 
 	if cacheHit {
 		g.Stats.CacheHits.Add(1)
-		return setSinkView(dest, value)
+		if err := setSinkView(dest, value); err != nil {
+			return fmt.Errorf("failed to set sink view: %w", err)
+		}
+		return nil
 	}
 
 	// Optimization to avoid double unmarshalling or copying: keep
@@ -256,12 +260,15 @@ func (g *Group) Get(ctx context.Context, key string, dest Sink) error {
 	destPopulated := false
 	value, destPopulated, err := g.load(ctx, key, dest)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load: %w", err)
 	}
 	if destPopulated {
 		return nil
 	}
-	return setSinkView(dest, value)
+	if err := setSinkView(dest, value); err != nil {
+		return fmt.Errorf("failed to set sink view: %w", err)
+	}
+	return nil
 }
 
 func (g *Group) Set(ctx context.Context, key string, value []byte, expire time.Time, hotCache bool) error {
@@ -276,7 +283,7 @@ func (g *Group) Set(ctx context.Context, key string, value []byte, expire time.T
 		owner, ok := g.peers.PickPeer(key)
 		if ok {
 			if err := g.setFromPeer(ctx, owner, key, value, expire); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to set from peer: %w", err)
 			}
 			// TODO(thrawn01): Not sure if this is useful outside of tests...
 			//  maybe we should ALWAYS update the local cache?
@@ -303,7 +310,7 @@ func (g *Group) Remove(ctx context.Context, key string) error {
 		owner, ok := g.peers.PickPeer(key)
 		if ok {
 			if err := g.removeFromPeer(ctx, owner, key); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to remove from peer: %w", err)
 			}
 		}
 		// Remove from our cache next
@@ -336,9 +343,9 @@ func (g *Group) Remove(ctx context.Context, key string) error {
 			err = e
 		}
 
-		return nil, err
+		return nil, fmt.Errorf("failed to remove: %w", err)
 	})
-	return err
+	return fmt.Errorf("failed to remove: %w", err)
 }
 
 // load loads key either by invoking the getter locally or by sending it to another machine.
@@ -419,14 +426,14 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 			if ctx != nil && ctx.Err() != nil {
 				// Return here without attempting to get locally
 				// since the context is no longer valid
-				return nil, err
+				return nil, fmt.Errorf("ctx error: %w", ctx.Err())
 			}
 		}
 
 		value, err = g.getLocally(ctx, key, dest)
 		if err != nil {
 			g.Stats.LocalLoadErrs.Add(1)
-			return nil, err
+			return nil, fmt.Errorf("failed to get locally: %w", err)
 		}
 		g.Stats.LocalLoads.Add(1)
 		destPopulated = true // only one caller of load gets this return value
@@ -442,7 +449,7 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 func (g *Group) getLocally(ctx context.Context, key string, dest Sink) (ByteView, error) {
 	err := g.getter.Get(ctx, key, dest)
 	if err != nil {
-		return ByteView{}, err
+		return ByteView{}, fmt.Errorf("failed to Get: %w", err)
 	}
 	return dest.view()
 }
@@ -455,7 +462,7 @@ func (g *Group) getFromPeer(ctx context.Context, peer ProtoGetter, key string) (
 	res := &pb.GetResponse{}
 	err := peer.Get(ctx, req, res)
 	if err != nil {
-		return ByteView{}, err
+		return ByteView{}, fmt.Errorf("failed to get from peer: %w", err)
 	}
 
 	var expire time.Time
@@ -484,7 +491,10 @@ func (g *Group) setFromPeer(ctx context.Context, peer ProtoGetter, k string, v [
 		Key:    &k,
 		Value:  v,
 	}
-	return peer.Set(ctx, req)
+	if err := peer.Set(ctx, req); err != nil {
+		return fmt.Errorf("failed to set peer: %w", err)
+	}
+	return nil
 }
 
 func (g *Group) removeFromPeer(ctx context.Context, peer ProtoGetter, key string) error {
@@ -492,7 +502,10 @@ func (g *Group) removeFromPeer(ctx context.Context, peer ProtoGetter, key string
 		Group: &g.name,
 		Key:   &key,
 	}
-	return peer.Remove(ctx, req)
+	if err := peer.Remove(ctx, req); err != nil {
+		return fmt.Errorf("failed to remove from peer: %w", err)
+	}
+	return nil
 }
 
 func (g *Group) lookupCache(key string) (value ByteView, ok bool) {

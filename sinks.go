@@ -18,6 +18,7 @@ package groupcache
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -68,12 +69,21 @@ func setSinkView(s Sink, v ByteView) error {
 		setView(v ByteView) error
 	}
 	if vs, ok := s.(viewSetter); ok {
-		return vs.setView(v)
+		if err := vs.setView(v); err != nil {
+			return fmt.Errorf("failed to set view: %w", err)
+		}
+		return nil
 	}
 	if v.b != nil {
-		return s.SetBytes(v.b, v.Expire())
+		if err := s.SetBytes(v.b, v.Expire()); err != nil {
+			return fmt.Errorf("failed to set bytes: %w", err)
+		}
+		return nil
 	}
-	return s.SetString(v.s, v.Expire())
+	if err := s.SetString(v.s, v.Expire()); err != nil {
+		return fmt.Errorf("failed to set string: %w", err)
+	}
+	return nil
 }
 
 // StringSink returns a Sink that populates the provided string pointer.
@@ -107,7 +117,7 @@ func (s *stringSink) SetBytes(v []byte, e time.Time) error {
 func (s *stringSink) SetProto(m proto.Message, e time.Time) error {
 	b, err := proto.Marshal(m)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal: %w", err)
 	}
 	s.v.b = b
 	*s.sp = string(b)
@@ -148,7 +158,7 @@ func (s *byteViewSink) view() (ByteView, error) {
 func (s *byteViewSink) SetProto(m proto.Message, e time.Time) error {
 	b, err := proto.Marshal(m)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal: %w", err)
 	}
 	*s.dst = ByteView{b: b, e: e}
 	return nil
@@ -185,7 +195,7 @@ func (s *protoSink) view() (ByteView, error) {
 func (s *protoSink) SetBytes(b []byte, e time.Time) error {
 	err := proto.Unmarshal(b, s.dst)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal: %w", err)
 	}
 	s.v.b = cloneBytes(b)
 	s.v.s = ""
@@ -197,7 +207,7 @@ func (s *protoSink) SetString(v string, e time.Time) error {
 	b := []byte(v)
 	err := proto.Unmarshal(b, s.dst)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal: %w", err)
 	}
 	s.v.b = b
 	s.v.s = ""
@@ -208,7 +218,7 @@ func (s *protoSink) SetString(v string, e time.Time) error {
 func (s *protoSink) SetProto(m proto.Message, e time.Time) error {
 	b, err := proto.Marshal(m)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal: %w", err)
 	}
 	// TODO(bradfitz): optimize for same-task case more and write
 	// right through? would need to document ownership rules at
@@ -216,7 +226,7 @@ func (s *protoSink) SetProto(m proto.Message, e time.Time) error {
 	// here. This works for now:
 	err = proto.Unmarshal(b, s.dst)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal: %w", err)
 	}
 	s.v.b = b
 	s.v.s = ""
@@ -253,7 +263,7 @@ func (s *allocBytesSink) setView(v ByteView) error {
 func (s *allocBytesSink) SetProto(m proto.Message, e time.Time) error {
 	b, err := proto.Marshal(m)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal: %w", err)
 	}
 	return s.setBytesOwned(b, e)
 }
@@ -304,7 +314,7 @@ func (s *truncBytesSink) view() (ByteView, error) {
 func (s *truncBytesSink) SetProto(m proto.Message, e time.Time) error {
 	b, err := proto.Marshal(m)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal: %w", err)
 	}
 	return s.setBytesOwned(b, e)
 }
