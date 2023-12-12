@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -254,6 +255,7 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Delete the key and return 200
 	if r.Method == http.MethodDelete {
+		log.Printf("handling delete request for %s", key)
 		group.localRemove(key)
 		return
 	}
@@ -286,6 +288,7 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("handling get request for key %s", key)
 	var b []byte
 
 	value := AllocatingByteSliceSink(&b)
@@ -344,6 +347,7 @@ func (h *httpGetter) makeRequest(ctx context.Context, m string, in request, b io
 		url.PathEscape(in.GetGroup()),
 		url.PathEscape(in.GetKey()),
 	)
+	log.Printf("making %s request to %v", m, u)
 	req, err := http.NewRequestWithContext(ctx, m, u, b)
 	if err != nil {
 		return fmt.Errorf("failed to create new request: %w", err)

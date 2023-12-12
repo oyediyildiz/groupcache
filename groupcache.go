@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -247,11 +248,13 @@ func (g *Group) Get(ctx context.Context, key string, dest Sink) error {
 
 	if cacheHit {
 		g.Stats.CacheHits.Add(1)
+		log.Printf("cache hit: %s", key)
 		if err := setSinkView(dest, value); err != nil {
 			return fmt.Errorf("failed to set sink view: %w", err)
 		}
 		return nil
 	}
+	log.Printf("cache miss: %s", key)
 
 	// Optimization to avoid double unmarshalling or copying: keep
 	// track of whether the dest was already populated. One caller
@@ -310,6 +313,7 @@ func (g *Group) Remove(ctx context.Context, key string) error {
 		owner, ok := g.peers.PickPeer(key)
 		if ok {
 			if err := g.removeFromPeer(ctx, owner, key); err != nil {
+				log.Printf("failed to remove %s from peer (owner): %s", key, err)
 				return nil, fmt.Errorf("failed to remove from peer: %w", err)
 			}
 		}
@@ -393,6 +397,9 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 
 			// get value from peers
 			value, err = g.getFromPeer(ctx, peer, key)
+			if err != nil {
+				log.Printf("got %s from peer %s", key, peer)
+			}
 
 			// metrics duration compute
 			duration := int64(time.Since(start)) / int64(time.Millisecond)
@@ -408,14 +415,17 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 			}
 
 			if errors.Is(err, context.Canceled) {
+				log.Printf("failed to get %s from peer: %s", key, err)
 				return nil, err
 			}
 
 			if errors.Is(err, &ErrNotFound{}) {
+				log.Printf("failed to get %s from peer: %s", key, err)
 				return nil, err
 			}
 
 			if errors.Is(err, &ErrRemoteCall{}) {
+				log.Printf("failed to get %s from peer: %s", key, err)
 				return nil, err
 			}
 
@@ -439,8 +449,10 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 		value, err = g.getLocally(ctx, key, dest)
 		if err != nil {
 			g.Stats.LocalLoadErrs.Add(1)
+			log.Printf("failed to get locally: %s", err)
 			return nil, fmt.Errorf("failed to get locally: %w", err)
 		}
+		log.Printf("got %s locally", key)
 		g.Stats.LocalLoads.Add(1)
 		destPopulated = true // only one caller of load gets this return value
 		g.populateCache(key, value, &g.mainCache)
@@ -504,6 +516,7 @@ func (g *Group) setFromPeer(ctx context.Context, peer ProtoGetter, k string, v [
 }
 
 func (g *Group) removeFromPeer(ctx context.Context, peer ProtoGetter, key string) error {
+	log.Printf("sending remove request for %s to peer %s", key, peer)
 	req := &pb.GetRequest{
 		Group: &g.name,
 		Key:   &key,
