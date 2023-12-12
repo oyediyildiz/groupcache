@@ -343,9 +343,15 @@ func (g *Group) Remove(ctx context.Context, key string) error {
 			err = e
 		}
 
-		return nil, fmt.Errorf("failed to remove: %w", err)
+		if err != nil {
+			return nil, fmt.Errorf("one of removal from peers failed: %w", err)
+		}
+		return nil, nil
 	})
-	return fmt.Errorf("failed to remove: %w", err)
+	if err != nil {
+		return fmt.Errorf("failed to remove: %w", err)
+	}
+	return nil
 }
 
 // load loads key either by invoking the getter locally or by sending it to another machine.
