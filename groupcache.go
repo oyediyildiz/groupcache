@@ -314,7 +314,7 @@ func (g *Group) Remove(ctx context.Context, key string) error {
 		if ok {
 			if err := g.removeFromPeer(ctx, owner, key); err != nil {
 				log.Printf("failed to remove %s from peer (owner): %s", key, err)
-				return nil, fmt.Errorf("failed to remove from peer: %w", err)
+				return nil, fmt.Errorf("failed to remove from owner peer: %w", err)
 			}
 		}
 		// Remove from our cache next
@@ -348,7 +348,7 @@ func (g *Group) Remove(ctx context.Context, key string) error {
 		}
 
 		if err != nil {
-			return nil, fmt.Errorf("one of removal from peers failed: %w", err)
+			return nil, fmt.Errorf("one of the non-owner peers failed to remove: %w", err)
 		}
 		return nil, nil
 	})
