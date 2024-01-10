@@ -398,7 +398,7 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 			// get value from peers
 			value, err = g.getFromPeer(ctx, peer, key)
 			if err != nil {
-				log.Printf("got %s from peer %s", key, peer)
+				log.Printf("failed to get %s from peer %s: %v", key, peer, err)
 			}
 
 			// metrics duration compute
@@ -415,17 +415,14 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 			}
 
 			if errors.Is(err, context.Canceled) {
-				log.Printf("failed to get %s from peer: %s", key, err)
 				return nil, err
 			}
 
 			if errors.Is(err, &ErrNotFound{}) {
-				log.Printf("failed to get %s from peer: %s", key, err)
 				return nil, err
 			}
 
 			if errors.Is(err, &ErrRemoteCall{}) {
-				log.Printf("failed to get %s from peer: %s", key, err)
 				return nil, err
 			}
 
@@ -449,7 +446,7 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 		value, err = g.getLocally(ctx, key, dest)
 		if err != nil {
 			g.Stats.LocalLoadErrs.Add(1)
-			log.Printf("failed to get locally: %s", err)
+			log.Printf("failed to get %s locally: %s", key, err)
 			return nil, fmt.Errorf("failed to get locally: %w", err)
 		}
 		log.Printf("got %s locally", key)
@@ -480,7 +477,7 @@ func (g *Group) getFromPeer(ctx context.Context, peer ProtoGetter, key string) (
 	res := &pb.GetResponse{}
 	err := peer.Get(ctx, req, res)
 	if err != nil {
-		return ByteView{}, fmt.Errorf("failed to get from peer: %w", err)
+		return ByteView{}, fmt.Errorf("failed to get %s from peer: %w", key, err)
 	}
 
 	var expire time.Time
@@ -522,7 +519,7 @@ func (g *Group) removeFromPeer(ctx context.Context, peer ProtoGetter, key string
 		Key:   &key,
 	}
 	if err := peer.Remove(ctx, req); err != nil {
-		return fmt.Errorf("failed to remove from peer: %w", err)
+		return fmt.Errorf("failed to remove %s from peer: %w", key, err)
 	}
 	return nil
 }
