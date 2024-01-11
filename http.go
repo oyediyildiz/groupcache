@@ -30,8 +30,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mailgun/groupcache/v2/consistenthash"
-	pb "github.com/mailgun/groupcache/v2/groupcachepb"
+	"github.com/oyediyildiz/groupcache/v2/consistenthash"
+	pb "github.com/oyediyildiz/groupcache/v2/groupcachepb"
 )
 
 const defaultBasePath = "/_groupcache/"
