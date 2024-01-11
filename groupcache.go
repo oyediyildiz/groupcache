@@ -35,20 +35,9 @@ import (
 	pb "github.com/oyediyildiz/groupcache/v2/groupcachepb"
 	"github.com/oyediyildiz/groupcache/v2/lru"
 	"github.com/oyediyildiz/groupcache/v2/singleflight"
-	"github.com/sirupsen/logrus"
 )
 
-var logger Logger
-
-// SetLogger - this is legacy to provide backwards compatibility with logrus.
-func SetLogger(log *logrus.Entry) {
-	logger = LogrusLogger{Entry: log}
-}
-
-// SetLoggerFromLogger - set the logger to an implementation of the Logger interface
-func SetLoggerFromLogger(log Logger) {
-	logger = log
-}
+var OnPeerError func(key string, peer string, err error)
 
 // A Getter loads data for a key.
 type Getter interface {
@@ -406,13 +395,8 @@ func (g *Group) load(ctx context.Context, key string, dest Sink) (value ByteView
 				return nil, err
 			}
 
-			if logger != nil {
-				logger.Error().
-					WithFields(map[string]interface{}{
-						"err":      err,
-						"key":      key,
-						"category": "groupcache",
-					}).Printf("error retrieving key from peer '%s'", peer.GetURL())
+			if OnPeerError != nil {
+				OnPeerError(key, peer.GetURL(), err)
 			}
 
 			g.Stats.PeerErrors.Add(1)
